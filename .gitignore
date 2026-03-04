@@ -1,0 +1,19 @@
+# Build
+bin/
+obj/
+
+# User specific
+*.user
+*.suo
+
+# SQLite database
+factura.db
+
+# Logs
+*.log
+
+# Visual Studio
+.vs/
+
+# Publish output
+publish/
