@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=factura.db"));
-builder.Services.AddScoped<IEmailProvider, OutlookEmailProvider>();
+builder.Services.AddTransient<IEmailProvider, OutlookEmailProvider>();
 builder.Services.AddHostedService<EmailProcessingWorker>();
 
 var app = builder.Build();

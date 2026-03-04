@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PropertyInvoiceScanner.Core.Interfaces;
@@ -7,43 +6,36 @@ namespace PropertyInvoiceScanner.Infrastructure;
 
 public class EmailProcessingWorker : BackgroundService
 {
+    private readonly IEmailProvider _emailProvider;
     private readonly ILogger<EmailProcessingWorker> _logger;
-    private readonly IServiceScopeFactory _scopeFactory;
 
     public EmailProcessingWorker(
-        ILogger<EmailProcessingWorker> logger,
-        IServiceScopeFactory scopeFactory)
+        IEmailProvider emailProvider,
+        ILogger<EmailProcessingWorker> logger)
     {
+        _emailProvider = emailProvider;
         _logger = logger;
-        _scopeFactory = scopeFactory;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("EmailProcessingWorker started at: {Time}", DateTimeOffset.Now);
+        _logger.LogInformation("EmailProcessingWorker started");
 
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var emailProvider = scope.ServiceProvider.GetRequiredService<IEmailProvider>();
+            var emails = await _emailProvider.GetNewEmailsAsync();
 
-            var emails = await emailProvider.GetNewEmailsAsync();
-
-            _logger.LogInformation("Total emails retrieved: {Count}", emails.Count);
+            _logger.LogInformation($"Retrieved {emails.Count} emails");
 
             foreach (var email in emails)
             {
-                _logger.LogInformation(
-                    "Email — Subject: {Subject} | Attachments: {AttachmentCount}",
-                    email.Subject,
-                    email.Attachments.Count);
+                _logger.LogInformation($"Subject: {email.Subject}");
+                _logger.LogInformation($"Attachments: {email.Attachments.Count}");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while retrieving emails from Outlook.");
+            _logger.LogError(ex, "Error retrieving emails");
         }
-
-        _logger.LogInformation("EmailProcessingWorker finished at: {Time}", DateTimeOffset.Now);
     }
 }
