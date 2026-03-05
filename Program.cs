@@ -3,6 +3,7 @@ using PropertyInvoiceScanner.Core.Interfaces;
 using PropertyInvoiceScanner.Infrastructure;
 using PropertyInvoiceScanner.Infrastructure.Data;
 using PropertyInvoiceScanner.Infrastructure.Email;
+using PropertyInvoiceScanner.Infrastructure.Pdf;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=factura.db"));
 builder.Services.AddTransient<IEmailProvider, OutlookEmailProvider>();
+builder.Services.AddSingleton<PdfInvoiceExtractor>();
 builder.Services.AddHostedService<EmailProcessingWorker>();
 
 var app = builder.Build();

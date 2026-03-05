@@ -1,17 +1,25 @@
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PropertyInvoiceScanner.Core.Interfaces;
 using PropertyInvoiceScanner.Core.Models;
+using PropertyInvoiceScanner.Infrastructure.Data;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace PropertyInvoiceScanner.Infrastructure.Email;
 
 public class OutlookEmailProvider : IEmailProvider
 {
+    private const int MaxEmailsPerRun = 50;
+
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OutlookEmailProvider> _logger;
 
-    public OutlookEmailProvider(ILogger<OutlookEmailProvider> logger)
+    public OutlookEmailProvider(
+        IServiceScopeFactory scopeFactory,
+        ILogger<OutlookEmailProvider> logger)
     {
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -44,11 +52,24 @@ public class OutlookEmailProvider : IEmailProvider
 
             items = folder.Items;
             filtered = items.Restrict("[Unread] = true");
+            filtered.Sort("[ReceivedTime]", true);
 
             _logger.LogInformation("Found {Count} unread emails in ParaProcesar.", filtered.Count);
 
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            int processed = 0;
+
             foreach (object item in filtered)
             {
+                if (processed >= MaxEmailsPerRun)
+                {
+                    _logger.LogInformation("Reached limit of {Limit} emails per run.", MaxEmailsPerRun);
+                    ReleaseComObject(item);
+                    break;
+                }
+
                 if (item is not Outlook.MailItem mail)
                 {
                     ReleaseComObject(item);
@@ -58,7 +79,16 @@ public class OutlookEmailProvider : IEmailProvider
                 try
                 {
                     if (mail.Attachments.Count == 0)
+                    {
+                        _logger.LogInformation("Skipped (no attachments): {Subject}", mail.Subject);
                         continue;
+                    }
+
+                    if (db.ProcessedEmails.Any(e => e.OutlookEntryId == mail.EntryID))
+                    {
+                        _logger.LogInformation("Skipped (already processed): {Subject}", mail.Subject);
+                        continue;
+                    }
 
                     var message = new EmailMessage
                     {
@@ -102,12 +132,17 @@ public class OutlookEmailProvider : IEmailProvider
                     }
 
                     messages.Add(message);
+                    processed++;
+
+                    _logger.LogInformation("Email queued for processing: {Subject}", message.Subject);
                 }
                 finally
                 {
                     ReleaseComObject(mail);
                 }
             }
+
+            _logger.LogInformation("Total emails queued: {Count}", messages.Count);
         }
         finally
         {
